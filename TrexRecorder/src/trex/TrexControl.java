@@ -23,10 +23,13 @@ public class TrexControl extends PamControlledUnit {
 	
 	private TrexGPSProcess trexGPSProcess;
 	
+	
+	
 	public TrexControl(String unitName) {
 		super(unitType, unitName);
 		this.trexGPSProcess = new TrexGPSProcess(this);
-		addPamProcess(trexGPSProcess);
+//		addPamProcess(trexGPSProcess);
+		addPamProcess(new TrexLogProcess(this));
 	}
 
 	public String findAcquisitionFolder() {
