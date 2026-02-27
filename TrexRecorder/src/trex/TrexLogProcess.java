@@ -14,6 +14,8 @@ import PamUtils.PamCalendar;
 import PamguardMVC.PamProcess;
 import geoMag.MagneticVariation;
 import geoMag.TSAGeoMag;
+import trex.logging.TrexGPSLogging;
+import trex.logging.TrexHPRLogging;
 /**
  * 
  * From Mark J in email on Sat 14 February 2026
@@ -58,11 +60,23 @@ public class TrexLogProcess extends PamProcess {
 	private MagneticVariation magVar;
 
 	private LatLong latLong;
+	
+	private TrexGpsDataBlock trexGpsDataBlock;
+	
+	private TrexHPRDataBlock trexHPRDataBlock;
 
 	public TrexLogProcess(TrexControl trexControl) {
 		super(trexControl, null);
 		this.trexControl = trexControl;
 		magVar = MagneticVariation.getInstance();
+		
+		trexGpsDataBlock = new TrexGpsDataBlock(this);
+		trexGpsDataBlock.SetLogging(new TrexGPSLogging(trexGpsDataBlock));
+		addOutputDataBlock(trexGpsDataBlock);
+		
+		trexHPRDataBlock = new TrexHPRDataBlock(this);
+		trexHPRDataBlock.SetLogging(new TrexHPRLogging(trexHPRDataBlock));
+		addOutputDataBlock(trexHPRDataBlock);
 	}
 
 	@Override
@@ -145,11 +159,39 @@ public class TrexLogProcess extends PamProcess {
 			System.out.println("Unable to find MAG line following " + accData);
 			return false;
 		}
+		String accOffsLine = null, magOffsLine = null;
+		accOffsLine = findLine(dis, "ACC_OFFS", 1);
+		if (accOffsLine != null) {
+			magOffsLine = findLine(dis, "MAG_OFFS", 1);
+		}
 		magData = breakLine(magLine);
 		double[] acc = breakAccMag(accData.getData()[0]);
 		double[] mag = breakAccMag(magData.getData()[0]);
 		if (mag.length != 3 || acc.length != 3) {
 			return false;
+		}
+		double[] accOffs = null, magOffs = null;
+		if (accOffsLine != null) {
+			LogLineData data = breakLine(accOffsLine);
+			if (data != null) {
+				accOffs = breakAccMag(data.getData()[0]);
+			}
+		}
+		if (magOffsLine != null) {
+			LogLineData data = breakLine(magOffsLine);
+			if (data != null) {
+				magOffs = breakAccMag(data.getData()[0]);
+			}
+		}
+		if (accOffs != null) {
+			for (int i = 0; i < 3; i++) {
+				acc[i] -= accOffs[i]; 
+			}
+		}
+		if (magOffs != null) {
+			for (int i = 0; i < 3; i++) {
+				mag[i] -= magOffs[i];
+			}
 		}
 		double mA = 0;
 		for (int i = 0; i < 3; i++) {
@@ -173,18 +215,19 @@ public class TrexLogProcess extends PamProcess {
 			sy += mag[i]*ty[i];
 			sx += mag[i]*tx[i];
 		}
-		double head = Math.atan2(-sy, sx)*180/Math.PI;
-		double trueHead = Double.NaN;
+		double head = Math.atan2(-sy, sx)*180./Math.PI;
+		Double trueHead = null;
 		double decl = Double.NaN;
 		if (latLong != null) {
 			decl = magVar.getVariation(magData.getUtc(), latLong.getLatitude(), latLong.getLongitude());
 			trueHead = head + decl;
 		}
 				
-		System.out.printf("HPR data at %s is Head=%3.1f degM (%3.1fT), pitch = %3.1f, roll = %3.1f\n",
-				PamCalendar.formatDBDateTime(magData.getUtc(), true),
-				head, trueHead, pitch*180/Math.PI, roll*180/Math.PI);
-
+//		System.out.printf("HPR data at %s is Head=%3.1fM (%3.1fT), pitch = %3.1f, roll = %3.1f\n",
+//				PamCalendar.formatDBDateTime(magData.getUtc(), true),
+//				head, trueHead, pitch*180/Math.PI, roll*180/Math.PI);
+		TrexHPRDataUnit hpr = new TrexHPRDataUnit(magData.getUtc(), head, trueHead, pitch*180./Math.PI, roll*180./Math.PI);
+		trexHPRDataBlock.addPamData(hpr);
 		
 
 		return true;
@@ -219,10 +262,13 @@ public class TrexLogProcess extends PamProcess {
 		Double lon = breakLLLine(lonData.getData()[0]);
 		if (lat == null || lon == null) {
 			System.out.println("Unable to decode latlong at " + latData);
+			return false;
 		}
 		
 		latLong = new LatLong(lat,  lon);
-		System.out.printf("Latlong at  %s is %s\n", PamCalendar.formatDBDateTime(latData.getUtc(), true), latLong);
+//		System.out.printf("Latlong at  %s is %s\n", PamCalendar.formatDBDateTime(latData.getUtc(), true), latLong);
+		TrexGpsDataUnit tgps = new TrexGpsDataUnit(latData.getUtc(), lat, lon);
+		trexGpsDataBlock.addPamData(tgps);
 		
 		return true;
 	}

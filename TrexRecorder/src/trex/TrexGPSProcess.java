@@ -25,6 +25,7 @@ public class TrexGPSProcess extends PamProcess {
 	private GPSDataBlock gpsDataBlock;
 	private volatile Thread extractThread;
 
+
 	public TrexGPSProcess(TrexControl trexControl) {
 		super(trexControl, null);
 		this.trexControl = trexControl;
